@@ -13,10 +13,12 @@ namespace Api.Controllers
     public class CategoriesController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<CategoriesController> _logger;
 
-        public CategoriesController(AppDbContext context)
+        public CategoriesController(AppDbContext context, ILogger<CategoriesController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -42,6 +44,8 @@ namespace Api.Controllers
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
             
+            _logger.LogInformation("Nueva categoría registrada: {Nombre} (ID: {Id})", category.Nombre, category.Id);
+
             categoryDto.Id = category.Id;
             return CreatedAtAction(nameof(GetCategory), new { id = category.Id }, categoryDto);
         }
@@ -58,6 +62,9 @@ namespace Api.Controllers
             category.Descripcion = categoryDto.Descripcion;
 
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categoría actualizada: {Nombre} (ID: {Id})", category.Nombre, category.Id);
+
             return NoContent();
         }
 
@@ -66,8 +73,13 @@ namespace Api.Controllers
         {
             var category = await _context.Categories.FindAsync(id);
             if (category == null) return NotFound();
+            
+            var nombre = category.Nombre;
             _context.Categories.Remove(category);
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categoría eliminada: {Nombre} (ID: {Id})", nombre, id);
+
             return NoContent();
         }
     }

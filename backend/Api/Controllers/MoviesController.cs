@@ -78,9 +78,8 @@ namespace Api.Controllers
             _context.Movies.Add(movie);
             await _context.SaveChangesAsync();
 
-            // Log: Fecha | Acción | IdPelicula | Precio | CategoriaId
-            _logger.LogInformation("{Action} | {IdPelicula} | {Precio} | {CategoriaId}", 
-                "Creación", movie.Id, movie.Precio, movie.CategoryId);
+            _logger.LogInformation("Nueva película registrada: {Titulo} (ID: {Id}) | Precio: {Precio} | Categoría: {CategoriaId}", 
+                movie.Titulo, movie.Id, movie.Precio, movie.CategoryId);
 
             return CreatedAtAction(nameof(GetMovie), new { id = movie.Id }, movie);
         }
@@ -101,9 +100,8 @@ namespace Api.Controllers
 
             await _context.SaveChangesAsync();
 
-            // Log: Fecha | Acción | IdPelicula | Precio | CategoriaId
-            _logger.LogInformation("{Action} | {IdPelicula} | {Precio} | {CategoriaId}", 
-                "Modificación", movie.Id, movie.Precio, movie.CategoryId);
+            _logger.LogInformation("Película actualizada: {Titulo} (ID: {Id}) | Precio: {Precio} | Categoría: {CategoriaId}", 
+                movie.Titulo, movie.Id, movie.Precio, movie.CategoryId);
 
             return NoContent();
         }
@@ -114,8 +112,12 @@ namespace Api.Controllers
             var movie = await _context.Movies.FindAsync(id);
             if (movie == null) return NotFound();
 
+            var titulo = movie.Titulo;
             _context.Movies.Remove(movie);
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Película eliminada: {Titulo} (ID: {Id})", titulo, id);
+
             return NoContent();
         }
     }
