@@ -26,3 +26,7 @@ docker compose up --build
 ## Comandos rápidos
 - **Detener todo:** `docker compose down`
 - **Ver logs en consola:** `docker compose logs -f backend`
+- **Correr Pruebas Unitarias:** 
+  ```bash
+  docker compose run --rm backend-test
+  ```
