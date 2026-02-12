@@ -1,1 +1,11 @@
 peliculas.log
+node_modules
+.env
+.vscode
+
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstate

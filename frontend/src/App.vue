@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { useToast } from 'vue-toastification'
 
+const toast = useToast()
 const API_URL = 'http://localhost:8080/api'
 const API_KEY = 'SecretApiKey123'
 
@@ -25,12 +27,16 @@ const newCategory = ref({
   descripcion: ''
 })
 
+const editingMovie = ref(null)
+const editingCategory = ref(null)
+
 const fetchCategories = async () => {
   try {
     const response = await axios.get(`${API_URL}/categories`)
     categories.value = response.data
   } catch (error) {
     console.error('Error fetching categories:', error)
+    toast.error('Error al cargar categorías')
   }
 }
 
@@ -41,42 +47,102 @@ const fetchMovies = async () => {
     movies.value = response.data
   } catch (error) {
     console.error('Error fetching movies:', error)
+    toast.error('Error al cargar películas')
   } finally {
     loading.value = false
   }
 }
 
 const addCategory = async () => {
-  if (!newCategory.value.nombre) return
+  if (!newCategory.value.nombre) {
+    toast.warning('El nombre de la categoría es requerido')
+    return
+  }
   try {
     await axios.post(`${API_URL}/categories`, newCategory.value)
     newCategory.value = { nombre: '', descripcion: '' }
     fetchCategories()
+    toast.success('Categoría agregada correctamente')
   } catch (error) {
-    if (error.response?.data?.detail) {
-      alert(`Error: ${error.response.data.detail}`)
-    } else {
-      console.error('Error adding category:', error)
-    }
+    toast.error(error.response?.data?.detail || 'Error al agregar categoría')
+  }
+}
+
+const updateCategory = async () => {
+  if (!editingCategory.value.nombre) {
+    toast.warning('El nombre de la categoría es requerido')
+    return
+  }
+  try {
+    await axios.put(`${API_URL}/categories/${editingCategory.value.id}`, editingCategory.value)
+    editingCategory.value = null
+    fetchCategories()
+    fetchMovies() // Por si cambió el nombre de la categoría en el listado de películas
+    toast.success('Categoría actualizada correctamente')
+  } catch (error) {
+    toast.error('Error al actualizar categoría')
+  }
+}
+
+const deleteCategory = async (cat) => {
+  const relatedMovies = movies.value.filter(m => m.categoryId === cat.id)
+  let message = `¿Estás seguro de eliminar la categoría "${cat.nombre}"?`
+  
+  if (relatedMovies.length > 0) {
+    message += `\n\n⚠️ ADVERTENCIA: Esta categoría tiene ${relatedMovies.length} películas asociadas. ¡Se ELIMINARÁN EN CASCADA todas ellas!`
+  }
+
+  if (!confirm(message)) return
+
+  try {
+    await axios.delete(`${API_URL}/categories/${cat.id}`)
+    fetchCategories()
+    fetchMovies()
+    toast.success('Categoría y sus películas eliminadas')
+  } catch (error) {
+    toast.error('Error al eliminar categoría')
   }
 }
 
 const addMovie = async () => {
   if (!newMovie.value.titulo || !newMovie.value.categoryId) {
-    alert('Título y Categoría son requeridos')
+    toast.warning('Título y Categoría son requeridos')
     return
   }
   try {
     await axios.post(`${API_URL}/movies`, newMovie.value)
     newMovie.value = { titulo: '', descripcion: '', precio: 0, categoryId: '', estado: 'Activa' }
     fetchMovies()
+    toast.success('Película agregada correctamente')
   } catch (error) {
     if (error.response?.data?.errors) {
-      const errors = Object.values(error.response.data.errors).flat().join('\n')
-      alert(`Validación Errónea:\n${errors}`)
+      const errors = Object.values(error.response.data.errors).flat().join('. ')
+      toast.error(`Validación: ${errors}`)
     } else {
-      console.error('Error adding movie:', error)
+      toast.error('Error al agregar película')
     }
+  }
+}
+
+const updateMovie = async () => {
+  if (!editingMovie.value.titulo || !editingMovie.value.categoryId) {
+    toast.warning('Título y Categoría son requeridos')
+    return
+  }
+  try {
+    await axios.put(`${API_URL}/movies/${editingMovie.value.id}`, {
+      id: editingMovie.value.id,
+      titulo: editingMovie.value.titulo,
+      descripcion: editingMovie.value.descripcion,
+      precio: editingMovie.value.precioUsd || editingMovie.value.precio, // Manejar la diferencia entre read y update DTO
+      categoryId: editingMovie.value.categoryId,
+      estado: editingMovie.value.estado
+    })
+    editingMovie.value = null
+    fetchMovies()
+    toast.success('Película actualizada correctamente')
+  } catch (error) {
+    toast.error('Error al actualizar película')
   }
 }
 
@@ -85,9 +151,20 @@ const deleteMovie = async (id) => {
   try {
     await axios.delete(`${API_URL}/movies/${id}`)
     fetchMovies()
+    toast.success('Película eliminada')
   } catch (error) {
-    console.error('Error deleting movie:', error)
+    toast.error('Error al eliminar película')
   }
+}
+
+const startEditCategory = (cat) => {
+  editingCategory.value = { ...cat }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const startEditMovie = (movie) => {
+  editingMovie.value = { ...movie, precio: movie.precioUsd }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 onMounted(() => {
@@ -107,8 +184,9 @@ onMounted(() => {
     <div class="grid">
       <!-- Sección de Categorías -->
       <section class="card">
-        <h2><span>🏷️</span> Nueva Categoría</h2>
-        <div class="form-group">
+        <h2><span>🏷️</span> {{ editingCategory ? 'Editar Categoría' : 'Nueva Categoría' }}</h2>
+        
+        <div class="form-group" v-if="!editingCategory">
           <input v-model="newCategory.nombre" placeholder="Nombre de Categoría" />
           <textarea v-model="newCategory.descripcion" placeholder="Descripción breve (opcional)" rows="2"></textarea>
           <button @click="addCategory" class="btn-primary">
@@ -116,18 +194,35 @@ onMounted(() => {
           </button>
         </div>
 
+        <div class="form-group" v-else>
+          <input v-model="editingCategory.nombre" placeholder="Nombre de Categoría" />
+          <textarea v-model="editingCategory.descripcion" placeholder="Descripción breve" rows="2"></textarea>
+          <div class="btn-group">
+            <button @click="updateCategory" class="btn-success">Guardar Cambios</button>
+            <button @click="editingCategory = null" class="btn-outline">Cancelar</button>
+          </div>
+        </div>
+
         <div class="list-minimal">
           <h3>Categorías Existentes</h3>
           <ul>
-            <li v-for="cat in categories" :key="cat.id">{{ cat.nombre }}</li>
+            <li v-for="cat in categories" :key="cat.id" class="category-item">
+              <span>{{ cat.nombre }}</span>
+              <div class="item-actions">
+                <button @click="startEditCategory(cat)" class="btn-icon">✏️</button>
+                <button @click="deleteCategory(cat)" class="btn-icon delete">🗑️</button>
+              </div>
+            </li>
           </ul>
         </div>
       </section>
 
       <!-- Sección de Películas -->
       <section class="card">
-        <h2><span>🎬</span> Nueva Película</h2>
-        <div class="form-group">
+        <h2><span>🎬</span> {{ editingMovie ? 'Editar Película' : 'Nueva Película' }}</h2>
+        
+        <!-- Formulario Crear -->
+        <div class="form-group" v-if="!editingMovie">
           <input v-model="newMovie.titulo" placeholder="Título de la película" />
           <textarea v-model="newMovie.descripcion" placeholder="Sinopsis o detalles..." rows="2"></textarea>
 
@@ -149,6 +244,31 @@ onMounted(() => {
           <button @click="addMovie" class="btn-success">
             Guardar Película
           </button>
+        </div>
+
+        <!-- Formulario Editar -->
+        <div class="form-group" v-else>
+          <input v-model="editingMovie.titulo" placeholder="Título de la película" />
+          <textarea v-model="editingMovie.descripcion" placeholder="Sinopsis..." rows="2"></textarea>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <input v-model.number="editingMovie.precioUsd" type="number" step="0.01" placeholder="Precio (USD)" />
+            <select v-model="editingMovie.categoryId">
+              <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+                {{ cat.nombre }}
+              </option>
+            </select>
+          </div>
+
+          <select v-model="editingMovie.estado">
+            <option value="Activa">Estado: Activa</option>
+            <option value="Inactiva">Estado: Inactiva</option>
+          </select>
+
+          <div class="btn-group">
+            <button @click="updateMovie" class="btn-success">Actualizar Película</button>
+            <button @click="editingMovie = null" class="btn-outline">Cancelar</button>
+          </div>
         </div>
       </section>
     </div>
@@ -185,7 +305,10 @@ onMounted(() => {
               <td>
                 <span :class="['badge', movie.estado.toLowerCase()]">{{ movie.estado }}</span>
               </td>
-              <td>
+              <td class="table-actions">
+                <button @click="startEditMovie(movie)" class="btn-edit">
+                  Editar
+                </button>
                 <button @click="deleteMovie(movie.id)" class="btn-danger">
                   Eliminar
                 </button>
@@ -472,17 +595,79 @@ tr:hover td {
   list-style: none;
   padding: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
 }
 
-.list-minimal li {
-  font-size: 13px;
-  padding: 6px 12px;
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  padding: 10px 14px;
   background: #f1f5f9;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--primary-light);
   font-weight: 500;
+  transition: var(--transition);
+}
+
+.category-item:hover {
+  background: #e2e8f0;
+}
+
+.item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  background: transparent;
+  padding: 4px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.btn-icon:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.btn-icon.delete:hover {
+  background: #fee2e2;
+}
+
+.btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.btn-outline:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.btn-edit {
+  background: #eef2ff;
+  color: var(--accent);
+  border: 1px solid #e0e7ff;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-edit:hover {
+  background: #e0e7ff;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* Animations */
@@ -505,6 +690,9 @@ tr:hover td {
 
 @media (max-width: 768px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+  .btn-group {
     grid-template-columns: 1fr;
   }
 }

@@ -9,5 +9,14 @@ namespace Api.Data
 
         public DbSet<Category> Categories { get; set; }
         public DbSet<Movie> Movies { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Movie>()
+                .HasOne(m => m.Category)
+                .WithMany()
+                .HasForeignKey(m => m.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        }
     }
 }
